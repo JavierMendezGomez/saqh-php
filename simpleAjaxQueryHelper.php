@@ -1,25 +1,31 @@
 <?php
 /**
- * @author Javier Méndez Gómez
- * @license GPLV3
+ * Simple AJAX Query Helper 
+ *
+ * @author  Javier Méndez Gómez <novdomo@gmail.com>
+ * @license GPLV3 https://www.gnu.org/licenses/gpl-3.0.en.html
  */
-class Upobeer_ajax{
+class SimpleAJAXQueryHelper
+{
     private $operations=["insertone","updateonepk","deleteonepk","selectonepk","selectall"];
     private $objects=array(
         "Cerveza"=>array(
             "inputfieldnames"=>["idCerveza","nombre","porcentaje","precio","stock","foto"],
             "insertfieldnames"=>["nombre","porcentaje","precio","stock","foto"],
             "pkfieldnames"=>["idCerveza"],
+            "nullablefieldnames"=>[]
         ),
         "Operario"=>array(
             "inputfieldnames"=>["usuario","dni","nombre","apellidos","fechaNacimiento","direccion","telefono","supervisor"],
             "insertfieldnames"=>["usuario","dni","nombre","apellidos","fechaNacimiento","direccion","telefono","supervisor"],
             "pkfieldnames"=>["dni"],
+            "nullablefieldnames"=>[]
         ),
         "Cliente"=>array(
             "inputfieldnames"=>["usuario","dni","nombre","apellidos","fechaNacimiento","direccion","telefono"],
             "insertfieldnames"=>["usuario","dni","nombre","apellidos","fechaNacimiento","direccion","telefono"],
             "pkfieldnames"=>["dni"],
+            "nullablefieldnames"=>[]
         ),
         "Pedido"=>array(
             "inputfieldnames"=>["idPedido","dniCliente","estado","fechaInicio","fechaFin"],
@@ -31,11 +37,13 @@ class Upobeer_ajax{
             "inputfieldnames"=>["idPedido","idProducto","cantidad"],
             "insertfieldnames"=>["idPedido","idProducto","cantidad"],
             "pkfieldnames"=>["idPedido","idProducto"],
+            "nullablefieldnames"=>[]
         ),
     );
 
     protected $status="noop";
     protected $messages=[];
+    protected $sql;
     private $operationSelected=null;
     private $objectSelected;
     private $inputFieldsAssoc;
@@ -45,44 +53,49 @@ class Upobeer_ajax{
     private $insertId;
     private $resultData=[];
     private $rowsAffected;
-    private function report_success($successMessage=null){
+    private function report_success($successMessage=null)
+    {
         $this->status="success";
         $this->messages[]=$successMessage;
     }
-    private function report_error($errorMessage){
+    private function report_error($errorMessage)
+    {
         $this->status="error";
         $this->messages[]=$errorMessage;
     }
     
-    private function insert_helper(){
+    private function insert_helper()
+    {
         $neededFieldNames=$this->objects[$this->objectSelected]["insertfieldnames"];
         $nullableFieldNames=$this->objects[$this->objectSelected]["nullablefieldnames"];
 
-        $neededFieldNamesString=implode(",",$neededFieldNames);
+        $neededFieldNamesString=implode(",", $neededFieldNames);
     
         $neededParametersArray=[];
         $executeAssoc=array();
         //
         $missingFields=false;
         $missingFieldsArray=[];
-        foreach($neededFieldNames as $field){
-            if(!in_array($field,$nullableFieldNames)){
-                if(!isset($this->inputFieldsAssoc[$field])){
+        foreach ($neededFieldNames as $field) {
+            if (!in_array($field, $nullableFieldNames)) {
+                if (!isset($this->inputFieldsAssoc[$field])) {
                     $missingFieldsArray[]=$field;
                     $missingFields=true;
                 }
             }
-            if(!$missingFields) {
+            if (!$missingFields) {
                 $neededParametersArray[]=":".$field;
-                $executeAssoc[$field]=(isset($this->inputFieldsAssoc[$field]))?$this->inputFieldsAssoc[$field]:null;
+                $executeAssoc[$field]= isset($this->inputFieldsAssoc[$field])
+                                     ? $this->inputFieldsAssoc[$field]
+                                     : null;
             }
         }
-        if($missingFields){
+        if ($missingFields) {
             $errorMessage="Faltan campos:".implode(", ", $missingFieldsArray);
             $this->report_error($errorMessage);
             return null;
         } else {
-            $neededParametersString=implode(",",$neededParametersArray);
+            $neededParametersString=implode(",", $neededParametersArray);
             return array(
                 //insert into(.........)
                 "neededFieldNamesString"=>$neededFieldNamesString,
@@ -93,24 +106,26 @@ class Upobeer_ajax{
             );
         }
     }
-    private function where_pk_helper(){
+    private function where_pk_helper()
+    {
         $pkFieldNames=$this->objects[$this->objectSelected]["pkfieldnames"];
         //
         $missingFields=false;
         $missingFieldsArray=[];
         $whereString=" WHERE 1=1 ";
         $executeAssoc=array();
-        foreach($pkFieldNames as $field){
-            if(!isset($this->inputFieldsAssoc[$field])){
+        foreach ($pkFieldNames as $field) {
+            if (!isset($this->inputFieldsAssoc[$field])) {
                 $missingFieldsArray[]=$field;
                 $missingFields=true;
             }
-            if(!$missingFields) {
-                $neededParametersArray[]=":".$field;
+            if (!$missingFields) {
+                $whereString .=" AND ${field} = :${field} ";
+                //                $neededParametersArray[]=":".$field;
                 $executeAssoc[$field]=isset($this->inputFieldsAssoc[$field]);
             }
         }
-        if($missingFields){
+        if ($missingFields) {
             $errorMessage="Faltan campos:".implode(", ", $missingFieldsArray);
             $this->report_error($errorMessage);
             return null;
@@ -123,10 +138,11 @@ class Upobeer_ajax{
         }
     }
 
-    private function update_set_helper(){
+    private function update_set_helper()
+    {
         $setFieldNames=$this->objects[$this->objectSelected]["insertfieldnames"];
         $pkFieldNames=$this->objects[$this->objectSelected]["pkfieldnames"];
-        foreach($pkFieldNames as $field){
+        foreach ($pkFieldNames as $field) {
             if (($index = array_search($field, $setFieldNames)) !== false) {
                 unset($setFieldNames[$index]);
             }
@@ -135,23 +151,23 @@ class Upobeer_ajax{
         $setString=" SET ";
     
         $executeAssoc=array();
-        if(sizeof($setFieldNames)>0){
+        if (sizeof($setFieldNames)>0) {
             //
             $missingFields=false;
             $missingFieldsArray=[];
-            $count=0; foreach($setFieldNames as $index=>$field){
-                if(!isset($this->inputFieldsAssoc[$field])){
+            $count=0; foreach ($setFieldNames as $index=>$field) {
+                if (!isset($this->inputFieldsAssoc[$field])) {
                     $missingFieldsArray[]=$field;
                     $missingFields=true;
                 }
-                if(!$missingFields) {
+                if (!$missingFields) {
                     $setString.=" {$field} = :{$field} " ;
                     $setString.= ($count<(sizeof($setFieldNames)-1)) ? "," : "" ; //poner coma al final siempre excepto en el último elemento
                     $executeAssoc[$field]=$this->inputFieldsAssoc[$field];
                 }
                 $count++;
             }
-            if($missingFields){
+            if ($missingFields) {
                 $errorMessage="Faltan campos: ".implode(", ", $missingFieldsArray);
                 $this->report_error($errorMessage);
                 return null;
@@ -167,31 +183,43 @@ class Upobeer_ajax{
         }
     }
     
-    private function checkObjectSelected(){
-        if(isset($_REQUEST["object"]))
-            foreach($this->objects as $objectName=>$objectValue)
-                if($_REQUEST["object"]==$objectName)
+    private function checkObjectSelected()
+    {
+        if (isset($_REQUEST["object"])) {
+            foreach ($this->objects as $objectName=>$objectValue) {
+                if ($_REQUEST["object"]==$objectName) {
                     $this->objectSelected=$_REQUEST["object"];
-    }
-    private function checkInputFields(){
-        $this->inputFieldsAssoc=array();
-        if($this->objectSelected!=null){
-            $inputFieldNames=$this->objects[$this->objectSelected]["inputfieldnames"];
-            foreach($inputFieldNames as $field)
-                if (isset($_REQUEST[$field]))
-                    $this->inputFieldsAssoc[$field]=$_REQUEST[$field];
+                }
+            }
         }
     }
-    private function checkOperation (){
-    if(isset($_REQUEST["operation"]))
-            foreach($this->operations as $operationIter)
-                if($_REQUEST["operation"]==$operationIter)
-                    $this->operationSelected=$_REQUEST["operation"];
+    private function checkInputFields()
+    {
+        $this->inputFieldsAssoc=array();
+        if ($this->objectSelected!=null) {
+            $inputFieldNames=$this->objects[$this->objectSelected]["inputfieldnames"];
+            foreach ($inputFieldNames as $field) {
+                if (isset($_REQUEST[$field])) {
+                    $this->inputFieldsAssoc[$field]=$_REQUEST[$field];
+                }
+            }
+        }
     }
-    private function checkPoint_firstPass(){
+    private function checkOperation()
+    {
+        if (isset($_REQUEST["operation"])) {
+            foreach ($this->operations as $operationIter) {
+                if ($_REQUEST["operation"]==$operationIter) {
+                    $this->operationSelected=$_REQUEST["operation"];
+                }
+            }
+        }
+    }
+    private function checkPoint_firstPass()
+    {
         
-        if($this->objectSelected!=null){
-            if($this->operationSelected!=null){
+        if($this->objectSelected!=null) {
+            if($this->operationSelected!=null) {
                 $this->firstPassOK=true;
             } else {
                 $this->report_error("No se ha seleccionado ninguna operación");
@@ -201,28 +229,31 @@ class Upobeer_ajax{
         }
     }
 
-    public function __construct(){
+    public function __construct()
+    {
         $this->checkObjectSelected();
         $this->checkInputFields();
         $this->checkOperation();
         $this->checkPoint_firstPass();
     }
-    public function execute(){
+    public function execute()
+    {
         $this->tryDB();
         $this->bringOutput();
     }
     
-    private function tryDB(){
-        if($this->firstPassOK){
+    private function tryDB()
+    {
+        if ($this->firstPassOK) {
             /////////////////////////////////
-            $conn=new PDO('mysql:host=localhost;dbname=upobeer','root','');
+            $conn=new PDO('mysql:host=localhost;dbname=upobeer', 'root', '');
             $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $sql;
 
             switch($this->operationSelected){
             case "insertone":
                 $insertHelperAssoc=$this->insert_helper();
-                if($insertHelperAssoc!=null){
+                if ($insertHelperAssoc!=null) {
                     $this->parametersOK=true;
                     extract($insertHelperAssoc);
 
@@ -252,22 +283,23 @@ class Upobeer_ajax{
             case "updateonepk":
                 $updateSetHelperAssoc=$this->update_set_helper();
                 $wherePkHelperAssoc=$this->where_pk_helper();
-                if($updateSetHelperAssoc!=null && $wherePkHelperAssoc!=null ){
+                if ($updateSetHelperAssoc!=null && $wherePkHelperAssoc!=null ) {
                     $this->parametersOK=true;
                     extract($updateSetHelperAssoc);
                     extract($wherePkHelperAssoc);
 
-                    $executeAssoc=array_merge($updateSetExecuteAssoc,$wherePkExecuteAssoc);
+                    $executeAssoc=array_merge($updateSetExecuteAssoc, $wherePkExecuteAssoc);
             
                     $sql="
-            update {$this->objectSelected}
-            ".$setString.$whereString;
+                    update {$this->objectSelected}
+                    ".$setString.$whereString;
+                    
                     try{
                         $conn->beginTransaction();
                         $stmt=$conn->prepare($sql);
                         $stmt->execute($executeAssoc);
                         $this->rowsAffected=$stmt->rowCount();
-                        if($this->rowsAffected==1){
+                        if ($this->rowsAffected==1) {
                             $conn->commit();
                             $this->report_success("Modificado");
                             $this->transactionOK=true;
@@ -284,7 +316,7 @@ class Upobeer_ajax{
 
             case "deleteonepk":
                 $wherePkHelperAssoc=$this->where_pk_helper();
-                if($wherePkHelperAssoc!=null){
+                if ($wherePkHelperAssoc!=null) {
                     $this->parametersOK=true;
                     extract($wherePkHelperAssoc);
                     $executeAssoc=$wherePkExecuteAssoc;
@@ -298,7 +330,7 @@ class Upobeer_ajax{
                         $stmt=$conn->prepare($sql);
                         $stmt->execute($executeAssoc);
                         $this->rowsAffected=$stmt->rowCount();
-                        if($this->rowsAffected==1){
+                        if ($this->rowsAffected==1) {
                             $conn->commit();
                             $this->report_success("Eliminado");
                             $this->transactionOK=true;
@@ -315,15 +347,16 @@ class Upobeer_ajax{
         
             case "selectonepk":
                 $wherePkHelperAssoc=$this->where_pk_helper();
-                if($wherePkHelperAssoc!=null){
+                if ($wherePkHelperAssoc!=null) {
                     $this->parametersOK=true;
                     extract($wherePkHelperAssoc);
                     $executeAssoc=$wherePkExecuteAssoc;
-            
+
                     $sql="
                     select * from {$this->objectSelected}
                     ".$whereString;
-           
+                    $this->sql=$sql;
+                    
                     try{
                         $stmt=$conn->prepare($sql);
                         $stmt->execute($executeAssoc);
@@ -342,7 +375,7 @@ class Upobeer_ajax{
             case "selectall":
                 $this->parametersOK=true;
 
-                $inputFieldsString=implode(",",$this->objects[$this->objectSelected]["inputfieldnames"]);
+                $inputFieldsString=implode(",", $this->objects[$this->objectSelected]["inputfieldnames"]);
                 $sql="
                 select
                    {$inputFieldsString}
@@ -354,7 +387,7 @@ class Upobeer_ajax{
                     $stmt->execute();
                     $this->rowsAffected=$stmt->rowCount();
 
-                    while($resultRow = $stmt->fetch(PDO::FETCH_ASSOC)){
+                    while ($resultRow = $stmt->fetch(PDO::FETCH_ASSOC)) {
                         $this->resultData[]=$resultRow;
                     }
                 
@@ -367,9 +400,20 @@ class Upobeer_ajax{
             }
         }
     }
-    private function bringOutput(){
-        if($this->status=="error")
-            http_response_code(400);
+    private function bringOutput()
+    {
+        if ($this->status=="success") {
+            if ($this->rowsAffected>0) {
+                http_response_code(201);
+            }
+        }
+        if ($this->status=="error") {
+            if (!$this->parametersOK) {
+                http_response_code(400);
+            } else {
+                http_response_code(409);
+            }
+        }
         
         $output=array(
             "status"=>$this->status,
@@ -378,8 +422,10 @@ class Upobeer_ajax{
             "operationselected"=>$this->operationSelected,
             "firstpassok"=>$this->firstPassOK,
             "parametersok"=>$this->parametersOK,
-            "transactionok"=>$this->transactionOK
+            "transactionok"=>$this->transactionOK,
+            "sql"=>$this->sql,
         );
+
         switch ($this->operationSelected){
         case "insertone":
             $output["insertid"]=$this->insertId;
@@ -398,7 +444,7 @@ class Upobeer_ajax{
         }
 
         header("Content-Type: application/json");
-        echo json_encode($output,JSON_PRETTY_PRINT);
+        echo json_encode($output, JSON_PRETTY_PRINT);
     }
 }
 
